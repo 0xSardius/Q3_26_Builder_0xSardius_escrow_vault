@@ -49,4 +49,9 @@ pub mod escrowq32026 {
         ctx.accounts.withdraw()?;
         ctx.accounts.close_vault()
     }
+
+    #[instruction(discriminator = 3)]
+    pub fn update(ctx: Context<Update>, receive: u64) -> Result<()> {
+        ctx.accounts.update(receive)
+    }
 }
