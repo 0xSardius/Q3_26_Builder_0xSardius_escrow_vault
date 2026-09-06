@@ -37,8 +37,12 @@ pub mod escrowq32026 {
         ctx.accounts.deposit(deposit)
     }
 
-    //take instruction
-    //TODO:
+    #[instruction(discriminator = 1)]
+    pub fn take(ctx: Context<Take>) -> Result<()> {
+        ctx.accounts.deposit()?;
+        ctx.accounts.withdraw()?;
+        ctx.accounts.close_vault()
+    }
 
     #[instruction(discriminator = 2)]
     pub fn refund(ctx: Context<Refund>) -> Result<()> {
