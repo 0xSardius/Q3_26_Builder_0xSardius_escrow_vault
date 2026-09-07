@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::{
+    error::ErrorCode,
     instructions::{close_vault as close_token_vault, withdraw_from_vault},
     state::Escrow,
     ESCROW_SEED,
@@ -38,6 +39,12 @@ pub struct Refund<'info> {
 }
 
 impl<'info> Refund<'info> {
+    pub fn assert_expired(&self) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        require!(now >= self.escrow.expiration, ErrorCode::EscrowNotExpired);
+        Ok(())
+    }
+
     pub fn withdraw(&mut self) -> Result<()> {
         let signer_seeds: [&[&[u8]]; 1] = [&[
             ESCROW_SEED,

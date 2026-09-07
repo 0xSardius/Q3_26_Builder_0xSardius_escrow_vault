@@ -12,6 +12,7 @@ use {
     litesvm_token::{
         spl_token::ID as TOKEN_PROGRAM_ID, CreateAssociatedTokenAccount, CreateMint, MintTo,
     },
+    solana_clock::Clock,
     solana_keypair::Keypair,
     solana_message::Message,
     solana_pubkey::Pubkey,
@@ -47,12 +48,27 @@ fn setup() -> (LiteSVM, Keypair) {
 }
 
 fn send(svm: &mut LiteSVM, payer: &Keypair, extra: &[&Keypair], ix: Instruction) {
+    try_send(svm, payer, extra, ix).unwrap();
+}
+
+fn try_send(
+    svm: &mut LiteSVM,
+    payer: &Keypair,
+    extra: &[&Keypair],
+    ix: Instruction,
+) -> litesvm::types::TransactionResult {
     let message = Message::new(&[ix], Some(&payer.pubkey()));
     let recent_blockhash = svm.latest_blockhash();
     let mut signers = vec![payer];
     signers.extend_from_slice(extra);
     let transaction = Transaction::new(&signers, message, recent_blockhash);
-    svm.send_transaction(transaction).unwrap();
+    svm.send_transaction(transaction)
+}
+
+fn set_clock(svm: &mut LiteSVM, unix_timestamp: i64) {
+    let mut clock = svm.get_sysvar::<Clock>();
+    clock.unix_timestamp = unix_timestamp;
+    svm.set_sysvar(&clock);
 }
 
 fn token_amount(svm: &LiteSVM, account: &Pubkey) -> u64 {
@@ -145,6 +161,9 @@ fn test_make_and_refund() {
     assert_eq!(escrow.mint_a, offer.mint_a);
     assert_eq!(escrow.mint_b, offer.mint_b);
     assert_eq!(escrow.receive, RECEIVE);
+
+    // Refund is only legal after the offer lapses.
+    set_clock(&mut svm, EXPIRATION);
 
     send(
         &mut svm,
@@ -256,4 +275,83 @@ fn test_take() {
     assert!(svm.get_account(&offer.vault).is_none());
     assert_eq!(token_amount(&svm, &taker_ata_a), DEPOSIT);
     assert_eq!(token_amount(&svm, &maker_ata_b), RECEIVE);
+}
+
+#[test]
+fn test_refund_rejected_while_live() {
+    let (mut svm, payer) = setup();
+    let offer = make_offer(&mut svm, &payer, RECEIVE);
+
+    let result = try_send(
+        &mut svm,
+        &payer,
+        &[],
+        Instruction {
+            program_id: escrowq32026::id(),
+            accounts: escrowq32026::accounts::Refund {
+                maker: payer.pubkey(),
+                mint_a: offer.mint_a,
+                maker_ata_a: offer.maker_ata_a,
+                escrow: offer.escrow,
+                vault: offer.vault,
+                token_program: TOKEN_PROGRAM_ID,
+                system_program: SYSTEM_PROGRAM_ID,
+            }
+            .to_account_metas(None),
+            data: escrowq32026::instruction::Refund {}.data(),
+        },
+    );
+
+    assert!(result.is_err());
+    assert!(svm.get_account(&offer.escrow).is_some());
+}
+
+#[test]
+fn test_take_rejected_when_expired() {
+    let (mut svm, payer) = setup();
+    let offer = make_offer(&mut svm, &payer, RECEIVE);
+    let maker = payer.pubkey();
+
+    let taker = Keypair::new();
+    svm.airdrop(&taker.pubkey(), 1_000_000_000).unwrap();
+    let taker_ata_b = CreateAssociatedTokenAccount::new(&mut svm, &taker, &offer.mint_b)
+        .owner(&taker.pubkey())
+        .send()
+        .unwrap();
+    MintTo::new(&mut svm, &payer, &offer.mint_b, &taker_ata_b, RECEIVE)
+        .send()
+        .unwrap();
+
+    set_clock(&mut svm, EXPIRATION);
+
+    let result = try_send(
+        &mut svm,
+        &taker,
+        &[],
+        Instruction {
+            program_id: escrowq32026::id(),
+            accounts: escrowq32026::accounts::Take {
+                taker: taker.pubkey(),
+                maker,
+                mint_a: offer.mint_a,
+                mint_b: offer.mint_b,
+                taker_ata_a: associated_token::get_associated_token_address(
+                    &taker.pubkey(),
+                    &offer.mint_a,
+                ),
+                taker_ata_b,
+                maker_ata_b: associated_token::get_associated_token_address(&maker, &offer.mint_b),
+                escrow: offer.escrow,
+                vault: offer.vault,
+                associated_token_program: ASSOCIATED_TOKEN_PROGRAM_ID,
+                token_program: TOKEN_PROGRAM_ID,
+                system_program: SYSTEM_PROGRAM_ID,
+            }
+            .to_account_metas(None),
+            data: escrowq32026::instruction::Take {}.data(),
+        },
+    );
+
+    assert!(result.is_err());
+    assert!(svm.get_account(&offer.escrow).is_some());
 }

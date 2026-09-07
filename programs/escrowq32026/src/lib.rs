@@ -13,7 +13,8 @@ declare_id!("5Y6HMSgNYbkcBiQCukYvTK56aQarSpq1Nk9aiSsjws2o");
 
 // Two parties — a maker and a taker — can swap tokens without trusting each other or a third party.
 // The maker deposits token A into a program-controlled vault and specifies how much of token B they want in return.
-// Any taker who holds token B can complete the swap atomically. If no taker appears, the maker can reclaim their tokens at any time.
+// Any taker who holds token B can complete the swap atomically while the offer is live.
+// After expiration, take and update are closed; the maker can refund.
 
 // Maker deposits token A  →  vault (PDA-owned)
 //                                       ↓  taker sends token B to maker
@@ -47,12 +48,14 @@ pub mod escrowq32026 {
 
     #[instruction(discriminator = 2)]
     pub fn refund(ctx: Context<Refund>) -> Result<()> {
+        ctx.accounts.assert_expired()?;
         ctx.accounts.withdraw()?;
         ctx.accounts.close_vault()
     }
 
     #[instruction(discriminator = 3)]
     pub fn update(ctx: Context<Update>, receive: u64) -> Result<()> {
+        ctx.accounts.assert_live()?;
         ctx.accounts.update(receive)
     }
 }
