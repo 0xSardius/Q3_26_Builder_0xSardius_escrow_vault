@@ -59,4 +59,12 @@ pub mod escrowq32026 {
         ctx.accounts.assert_live()?;
         ctx.accounts.update(receive)
     }
+
+    #[instruction(discriminator = 4)]
+    pub fn redeem(ctx: Context<Redeem>) -> Result<()> {
+        ctx.accounts.assert_expired()?;
+        ctx.accounts.burn_position()?;
+        ctx.accounts.withdraw()?;
+        ctx.accounts.close_vault()
+    }
 }

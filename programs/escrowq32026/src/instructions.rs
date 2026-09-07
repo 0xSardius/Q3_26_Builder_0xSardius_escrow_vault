@@ -15,3 +15,6 @@ pub use take::*;
 
 pub mod update;
 pub use update::*;
+
+pub mod redeem;
+pub use redeem::*;

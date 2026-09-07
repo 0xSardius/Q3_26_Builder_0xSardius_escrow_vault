@@ -366,3 +366,60 @@ fn test_take_rejected_when_expired() {
     assert!(result.is_err());
     assert!(svm.get_account(&offer.escrow).is_some());
 }
+
+fn redeem_ix(holder: Pubkey, maker: Pubkey, offer: &Offer, holder_ata_a: Pubkey) -> Instruction {
+    Instruction {
+        program_id: escrowq32026::id(),
+        accounts: escrowq32026::accounts::Redeem {
+            holder,
+            maker,
+            mint_a: offer.mint_a,
+            position_mint: offer.position_mint,
+            holder_position_ata: offer.maker_position_ata,
+            holder_ata_a,
+            escrow: offer.escrow,
+            vault: offer.vault,
+            associated_token_program: ASSOCIATED_TOKEN_PROGRAM_ID,
+            token_program: TOKEN_PROGRAM_ID,
+            system_program: SYSTEM_PROGRAM_ID,
+        }
+        .to_account_metas(None),
+        data: escrowq32026::instruction::Redeem {}.data(),
+    }
+}
+
+#[test]
+fn test_redeem_after_expiry() {
+    let (mut svm, payer) = setup();
+    let offer = make_offer(&mut svm, &payer, RECEIVE);
+    set_clock(&mut svm, EXPIRATION);
+
+    send(
+        &mut svm,
+        &payer,
+        &[],
+        redeem_ix(payer.pubkey(), payer.pubkey(), &offer, offer.maker_ata_a),
+    );
+
+    assert!(svm.get_account(&offer.escrow).is_none());
+    assert!(svm.get_account(&offer.vault).is_none());
+    assert_eq!(token_amount(&svm, &offer.maker_ata_a), 1_000_000_000);
+    assert_eq!(token_amount(&svm, &offer.maker_position_ata), 0);
+}
+
+#[test]
+fn test_redeem_rejected_while_live() {
+    let (mut svm, payer) = setup();
+    let offer = make_offer(&mut svm, &payer, RECEIVE);
+
+    let result = try_send(
+        &mut svm,
+        &payer,
+        &[],
+        redeem_ix(payer.pubkey(), payer.pubkey(), &offer, offer.maker_ata_a),
+    );
+
+    assert!(result.is_err());
+    assert!(svm.get_account(&offer.escrow).is_some());
+    assert_eq!(token_amount(&svm, &offer.maker_position_ata), 1);
+}

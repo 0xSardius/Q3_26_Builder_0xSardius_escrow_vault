@@ -8,4 +8,6 @@ pub enum ErrorCode {
     EscrowNotExpired,
     #[msg("Expiration must be in the future")]
     EscrowExpirationInPast,
+    #[msg("Holder must own the position receipt")]
+    MissingPosition,
 }
