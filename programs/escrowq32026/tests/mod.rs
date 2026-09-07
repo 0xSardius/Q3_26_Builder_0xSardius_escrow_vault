@@ -188,6 +188,8 @@ fn test_make_and_refund() {
                 maker_ata_a: offer.maker_ata_a,
                 escrow: offer.escrow,
                 vault: offer.vault,
+                position_mint: offer.position_mint,
+                maker_position_ata: offer.maker_position_ata,
                 token_program: TOKEN_PROGRAM_ID,
                 system_program: SYSTEM_PROGRAM_ID,
             }
@@ -200,6 +202,7 @@ fn test_make_and_refund() {
     assert!(svm.get_account(&offer.escrow).is_none());
     assert!(svm.get_account(&offer.vault).is_none());
     assert_eq!(token_amount(&svm, &offer.maker_ata_a), 1_000_000_000);
+    assert_eq!(token_amount(&svm, &offer.maker_position_ata), 0);
 }
 
 #[test]
@@ -272,6 +275,8 @@ fn test_take() {
                 maker_ata_b,
                 escrow: offer.escrow,
                 vault: offer.vault,
+                position_mint: offer.position_mint,
+                maker_position_ata: offer.maker_position_ata,
                 associated_token_program: ASSOCIATED_TOKEN_PROGRAM_ID,
                 token_program: TOKEN_PROGRAM_ID,
                 system_program: SYSTEM_PROGRAM_ID,
@@ -286,6 +291,7 @@ fn test_take() {
     assert!(svm.get_account(&offer.vault).is_none());
     assert_eq!(token_amount(&svm, &taker_ata_a), DEPOSIT);
     assert_eq!(token_amount(&svm, &maker_ata_b), RECEIVE);
+    assert_eq!(token_amount(&svm, &offer.maker_position_ata), 0);
 }
 
 #[test]
@@ -305,6 +311,8 @@ fn test_refund_rejected_while_live() {
                 maker_ata_a: offer.maker_ata_a,
                 escrow: offer.escrow,
                 vault: offer.vault,
+                position_mint: offer.position_mint,
+                maker_position_ata: offer.maker_position_ata,
                 token_program: TOKEN_PROGRAM_ID,
                 system_program: SYSTEM_PROGRAM_ID,
             }
@@ -354,6 +362,8 @@ fn test_take_rejected_when_expired() {
                 maker_ata_b: associated_token::get_associated_token_address(&maker, &offer.mint_b),
                 escrow: offer.escrow,
                 vault: offer.vault,
+                position_mint: offer.position_mint,
+                maker_position_ata: offer.maker_position_ata,
                 associated_token_program: ASSOCIATED_TOKEN_PROGRAM_ID,
                 token_program: TOKEN_PROGRAM_ID,
                 system_program: SYSTEM_PROGRAM_ID,

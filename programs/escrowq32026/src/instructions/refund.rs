@@ -1,24 +1,24 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
+use anchor_spl::token_interface::{burn, Burn, Mint, TokenAccount, TokenInterface};
 
 use crate::{
     error::ErrorCode,
     instructions::{close_vault as close_token_vault, withdraw_from_vault},
     state::Escrow,
-    ESCROW_SEED,
+    ESCROW_SEED, POSITION_SEED,
 };
 
 #[derive(Accounts)]
 pub struct Refund<'info> {
     #[account(mut)]
     maker: Signer<'info>,
-    mint_a: InterfaceAccount<'info, Mint>,
+    mint_a: Box<InterfaceAccount<'info, Mint>>,
     #[account(
         mut,
         associated_token::mint = mint_a,
         associated_token::authority = maker,
     )]
-    maker_ata_a: InterfaceAccount<'info, TokenAccount>,
+    maker_ata_a: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         close = maker,
@@ -27,13 +27,27 @@ pub struct Refund<'info> {
         seeds = [ESCROW_SEED, maker.key().as_ref(), escrow.seed.to_le_bytes().as_ref()],
         bump = escrow.bump,
     )]
-    pub escrow: Account<'info, Escrow>,
+    pub escrow: Box<Account<'info, Escrow>>,
     #[account(
         mut,
         associated_token::mint = mint_a,
         associated_token::authority = escrow,
     )]
-    vault: InterfaceAccount<'info, TokenAccount>,
+    vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(
+        mut,
+        seeds = [POSITION_SEED, escrow.key().as_ref()],
+        bump,
+        address = escrow.position_mint
+    )]
+    position_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(
+        mut,
+        associated_token::mint = position_mint,
+        associated_token::authority = maker,
+        constraint = maker_position_ata.amount == 1 @ ErrorCode::MissingPosition
+    )]
+    maker_position_ata: Box<InterfaceAccount<'info, TokenAccount>>,
     token_program: Interface<'info, TokenInterface>,
     system_program: Program<'info, System>,
 }
@@ -43,6 +57,16 @@ impl<'info> Refund<'info> {
         let now = Clock::get()?.unix_timestamp;
         require!(now >= self.escrow.expiration, ErrorCode::EscrowNotExpired);
         Ok(())
+    }
+
+    pub fn burn_position(&self) -> Result<()> {
+        let cpi_accounts = Burn {
+            mint: self.position_mint.to_account_info(),
+            from: self.maker_position_ata.to_account_info(),
+            authority: self.maker.to_account_info(),
+        };
+
+        burn(CpiContext::new(self.token_program.key(), cpi_accounts), 1)
     }
 
     pub fn withdraw(&mut self) -> Result<()> {

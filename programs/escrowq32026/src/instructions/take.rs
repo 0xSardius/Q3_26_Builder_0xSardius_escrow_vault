@@ -1,14 +1,16 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
+    token_interface::{
+        burn, transfer_checked, Burn, Mint, TokenAccount, TokenInterface, TransferChecked,
+    },
 };
 
 use crate::{
     error::ErrorCode,
     instructions::{close_vault as close_token_vault, withdraw_from_vault},
     state::Escrow,
-    ESCROW_SEED,
+    ESCROW_SEED, POSITION_SEED,
 };
 
 #[derive(Accounts)]
@@ -61,6 +63,21 @@ pub struct Take<'info> {
         associated_token::token_program = token_program
     )]
     pub vault: Box<InterfaceAccount<'info, TokenAccount>>,
+    #[account(
+        mut,
+        seeds = [POSITION_SEED, escrow.key().as_ref()],
+        bump,
+        address = escrow.position_mint
+    )]
+    pub position_mint: Box<InterfaceAccount<'info, Mint>>,
+    #[account(
+        mut,
+        associated_token::mint = position_mint,
+        associated_token::authority = maker,
+        associated_token::token_program = token_program,
+        constraint = maker_position_ata.amount == 1 @ ErrorCode::MissingPosition
+    )]
+    pub maker_position_ata: Box<InterfaceAccount<'info, TokenAccount>>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
@@ -71,6 +88,26 @@ impl<'info> Take<'info> {
         let now = Clock::get()?.unix_timestamp;
         require!(now < self.escrow.expiration, ErrorCode::EscrowExpired);
         Ok(())
+    }
+
+    pub fn burn_position(&self) -> Result<()> {
+        let signer_seeds: [&[&[u8]]; 1] = [&[
+            ESCROW_SEED,
+            self.maker.key.as_ref(),
+            &self.escrow.seed.to_le_bytes()[..],
+            &[self.escrow.bump],
+        ]];
+
+        let cpi_accounts = Burn {
+            mint: self.position_mint.to_account_info(),
+            from: self.maker_position_ata.to_account_info(),
+            authority: self.escrow.to_account_info(),
+        };
+
+        burn(
+            CpiContext::new_with_signer(self.token_program.key(), cpi_accounts, &signer_seeds),
+            1,
+        )
     }
 
     pub fn deposit(&mut self) -> Result<()> {

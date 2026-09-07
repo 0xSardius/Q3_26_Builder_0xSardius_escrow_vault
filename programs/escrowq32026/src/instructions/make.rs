@@ -4,7 +4,8 @@ use crate::{error::ErrorCode, Escrow, ESCROW_SEED, POSITION_SEED};
 use anchor_spl::{
     associated_token::AssociatedToken,
     token_interface::{
-        mint_to, transfer_checked, Mint, MintTo, TokenAccount, TokenInterface, TransferChecked,
+        approve, mint_to, transfer_checked, Approve, Mint, MintTo, TokenAccount, TokenInterface,
+        TransferChecked,
     },
 };
 
@@ -109,6 +110,18 @@ impl<'info> Make<'info> {
 
         mint_to(
             CpiContext::new_with_signer(self.token_program.key(), cpi_accounts, &signer_seeds),
+            1,
+        )?;
+
+        // Escrow can burn this receipt on take without the maker signing.
+        let approve_accounts = Approve {
+            to: self.maker_position_ata.to_account_info(),
+            delegate: self.escrow.to_account_info(),
+            authority: self.maker.to_account_info(),
+        };
+
+        approve(
+            CpiContext::new(self.token_program.key(), approve_accounts),
             1,
         )
     }

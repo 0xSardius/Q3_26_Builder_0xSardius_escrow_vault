@@ -42,6 +42,7 @@ pub mod escrowq32026 {
     #[instruction(discriminator = 1)]
     pub fn take(ctx: Context<Take>) -> Result<()> {
         ctx.accounts.assert_live()?;
+        ctx.accounts.burn_position()?;
         ctx.accounts.deposit()?;
         ctx.accounts.withdraw()?;
         ctx.accounts.close_vault()
@@ -50,6 +51,7 @@ pub mod escrowq32026 {
     #[instruction(discriminator = 2)]
     pub fn refund(ctx: Context<Refund>) -> Result<()> {
         ctx.accounts.assert_expired()?;
+        ctx.accounts.burn_position()?;
         ctx.accounts.withdraw()?;
         ctx.accounts.close_vault()
     }
