@@ -31,6 +31,8 @@ struct Offer {
     maker_ata_a: Pubkey,
     escrow: Pubkey,
     vault: Pubkey,
+    position_mint: Pubkey,
+    maker_position_ata: Pubkey,
 }
 
 fn setup() -> (LiteSVM, Keypair) {
@@ -107,6 +109,9 @@ fn make_offer(svm: &mut LiteSVM, payer: &Keypair, receive: u64) -> Offer {
     )
     .0;
     let vault = associated_token::get_associated_token_address(&escrow, &mint_a);
+    let position_mint = Pubkey::find_program_address(&[b"position", escrow.as_ref()], &escrowq32026::id()).0;
+    let maker_position_ata =
+        associated_token::get_associated_token_address(&maker, &position_mint);
 
     MintTo::new(svm, payer, &mint_a, &maker_ata_a, 1_000_000_000)
         .send()
@@ -125,6 +130,8 @@ fn make_offer(svm: &mut LiteSVM, payer: &Keypair, receive: u64) -> Offer {
                 maker_ata_a,
                 escrow,
                 vault,
+                position_mint,
+                maker_position_ata,
                 associated_token_program: ASSOCIATED_TOKEN_PROGRAM_ID,
                 token_program: TOKEN_PROGRAM_ID,
                 system_program: SYSTEM_PROGRAM_ID,
@@ -146,6 +153,8 @@ fn make_offer(svm: &mut LiteSVM, payer: &Keypair, receive: u64) -> Offer {
         maker_ata_a,
         escrow,
         vault,
+        position_mint,
+        maker_position_ata,
     }
 }
 
@@ -161,6 +170,8 @@ fn test_make_and_refund() {
     assert_eq!(escrow.mint_a, offer.mint_a);
     assert_eq!(escrow.mint_b, offer.mint_b);
     assert_eq!(escrow.receive, RECEIVE);
+    assert_eq!(escrow.position_mint, offer.position_mint);
+    assert_eq!(token_amount(&svm, &offer.maker_position_ata), 1);
 
     // Refund is only legal after the offer lapses.
     set_clock(&mut svm, EXPIRATION);

@@ -1,9 +1,11 @@
 use anchor_lang::prelude::*;
 
-use crate::{error::ErrorCode, Escrow, ESCROW_SEED};
+use crate::{error::ErrorCode, Escrow, ESCROW_SEED, POSITION_SEED};
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token_interface::{transfer_checked, Mint, TokenAccount, TokenInterface, TransferChecked},
+    token_interface::{
+        mint_to, transfer_checked, Mint, MintTo, TokenAccount, TokenInterface, TransferChecked,
+    },
 };
 
 #[derive(Accounts)]
@@ -41,7 +43,24 @@ pub struct Make<'info> {
         associated_token::token_program = token_program
     )]
     pub vault: InterfaceAccount<'info, TokenAccount>,
-
+    #[account(
+        init,
+        payer = maker,
+        seeds = [POSITION_SEED, escrow.key().as_ref()],
+        bump,
+        mint::decimals = 0,
+        mint::authority = escrow,
+        mint::token_program = token_program
+    )]
+    pub position_mint: InterfaceAccount<'info, Mint>,
+    #[account(
+        init,
+        payer = maker,
+        associated_token::mint = position_mint,
+        associated_token::authority = maker,
+        associated_token::token_program = token_program
+    )]
+    pub maker_position_ata: InterfaceAccount<'info, TokenAccount>,
 
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub token_program: Interface<'info, TokenInterface>,
@@ -69,8 +88,29 @@ impl<'info> Make<'info> {
             receive: receive,
             bump: bumps.escrow,
             expiration: expiration,
+            position_mint: self.position_mint.key(),
         });
         Ok(())
+    }
+
+    pub fn mint_position(&self) -> Result<()> {
+        let signer_seeds: [&[&[u8]]; 1] = [&[
+            ESCROW_SEED,
+            self.maker.key.as_ref(),
+            &self.escrow.seed.to_le_bytes()[..],
+            &[self.escrow.bump],
+        ]];
+
+        let cpi_accounts = MintTo {
+            mint: self.position_mint.to_account_info(),
+            to: self.maker_position_ata.to_account_info(),
+            authority: self.escrow.to_account_info(),
+        };
+
+        mint_to(
+            CpiContext::new_with_signer(self.token_program.key(), cpi_accounts, &signer_seeds),
+            1,
+        )
     }
 
     //Deposit tokens from maker to vault

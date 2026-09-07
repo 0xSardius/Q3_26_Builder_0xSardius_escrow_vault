@@ -35,7 +35,8 @@ pub mod escrowq32026 {
     ) -> Result<()> {
         ctx.accounts
             .init_escrow(seed, receive, &ctx.bumps, expiration)?;
-        ctx.accounts.deposit(deposit)
+        ctx.accounts.deposit(deposit)?;
+        ctx.accounts.mint_position()
     }
 
     #[instruction(discriminator = 1)]
