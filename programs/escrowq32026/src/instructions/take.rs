@@ -5,6 +5,7 @@ use anchor_spl::{
 };
 
 use crate::{
+    error::ErrorCode,
     instructions::{close_vault as close_token_vault, withdraw_from_vault},
     state::Escrow,
     ESCROW_SEED,
@@ -66,6 +67,12 @@ pub struct Take<'info> {
 }
 
 impl<'info> Take<'info> {
+    pub fn assert_live(&self) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        require!(now < self.escrow.expiration, ErrorCode::EscrowExpired);
+        Ok(())
+    }
+
     pub fn deposit(&mut self) -> Result<()> {
         let cpi_accounts = TransferChecked {
             from: self.taker_ata_b.to_account_info(),

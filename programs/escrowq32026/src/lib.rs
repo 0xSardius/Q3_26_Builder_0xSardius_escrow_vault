@@ -39,6 +39,7 @@ pub mod escrowq32026 {
 
     #[instruction(discriminator = 1)]
     pub fn take(ctx: Context<Take>) -> Result<()> {
+        ctx.accounts.assert_live()?;
         ctx.accounts.deposit()?;
         ctx.accounts.withdraw()?;
         ctx.accounts.close_vault()
